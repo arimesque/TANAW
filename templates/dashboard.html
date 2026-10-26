@@ -1,0 +1,131 @@
+{% extends "base.html" %}
+{% from "_macros.html" import icon %}
+{% block title %}MDRRMO dashboard{% endblock %}
+{% block head %}<link rel="stylesheet" href="{{ url_for('static', filename='css/admin.css') }}">{% endblock %}
+
+{% macro bars(items, color_prefix) %}
+    {% set top = (items | map(attribute='count') | max) or 1 %}
+    <ul class="bars">
+    {% for item in items %}
+        <li>
+            <span class="bar-label">{{ item.label }}</span>
+            <span class="bar-track" aria-hidden="true"><span class="bar-fill {{ color_prefix ~ item.key }}" style="width: {{ (item.count / top * 100) | round(1) }}%"></span></span>
+            <span class="bar-value">{{ item.count }}</span>
+        </li>
+    {% endfor %}
+    </ul>
+{% endmacro %}
+
+{% block content %}
+<div class="page-head">
+    <div>
+        <p class="eyebrow">TANAW / MDRRMO</p>
+        <h1>Dashboard</h1>
+        <p class="muted">Incident reports and mapped information, calculated from the database.</p>
+    </div>
+    <div class="btn-row">
+        <a class="btn btn-secondary" href="{{ url_for('map_page') }}">{{ icon('map') }} Open map</a>
+        <a class="btn btn-secondary" href="{{ url_for('vulnerability_dashboard') }}">{{ icon('users') }} Community vulnerability</a>
+    </div>
+</div>
+
+<section class="stat-grid" aria-label="Summary">
+    <a class="stat" href="{{ url_for('dashboard') }}#reports"><span class="stat-icon">{{ icon('clipboard-list') }}</span><span class="stat-num">{{ stats.total }}</span><span class="stat-label">Total reports</span></a>
+    <a class="stat" href="{{ url_for('dashboard', status='pending') }}#reports"><span class="stat-icon pend">{{ icon('hourglass') }}</span><span class="stat-num">{{ stats.by_status.pending }}</span><span class="stat-label">Pending review</span></a>
+    <a class="stat" href="{{ url_for('dashboard', status='verified') }}#reports"><span class="stat-icon ver">{{ icon('badge-check') }}</span><span class="stat-num">{{ stats.by_status.verified }}</span><span class="stat-label">Verified</span></a>
+    <a class="stat" href="{{ url_for('dashboard', status='resolved') }}#reports"><span class="stat-icon res">{{ icon('circle-check') }}</span><span class="stat-num">{{ stats.by_status.resolved }}</span><span class="stat-label">Resolved</span></a>
+    <a class="stat" href="{{ url_for('map_page') }}"><span class="stat-icon map">{{ icon('map-pin') }}</span><span class="stat-num">{{ stats.markings_total }}</span><span class="stat-label">Map markings</span></a>
+</section>
+
+<section class="chart-grid">
+    <article class="card">
+        <h2>Reports by incident type</h2>
+        {% if stats.total %}{{ bars(type_chart, 'fill-type-') }}{% else %}<p class="muted">No reports yet.</p>{% endif %}
+    </article>
+    <article class="card">
+        <h2>Map markings by category</h2>
+        {% if stats.markings_total %}{{ bars(category_chart, 'fill-cat-') }}{% else %}<p class="muted">No map markings yet. Add them from the <a class="link" href="{{ url_for('map_page') }}">map</a>.</p>{% endif %}
+    </article>
+    <article class="card wide">
+        <h2>Reports received, last 14 days</h2>
+        {% set top = (daily | map(attribute='count') | max) or 1 %}
+        <div class="daily" role="img" aria-label="Reports per day for the last 14 days">
+            {% for day in daily %}
+            <div class="daily-col" title="{{ day.label }}: {{ day.count }}">
+                <span class="daily-num">{{ day.count if day.count else '' }}</span>
+                <span class="daily-bar" style="height: {{ (day.count / top * 100) | round(1) if day.count else 2 }}%"></span>
+                <span class="daily-label">{{ day.label }}</span>
+            </div>
+            {% endfor %}
+        </div>
+    </article>
+    <article class="card">
+        <h2>Community vulnerability</h2>
+        {% if vulnerability.rows_total == 0 %}
+            <p class="muted">No barangay data has been entered.</p>
+        {% elif vulnerability.rows_total == vulnerability.sample_rows %}
+            <p class="muted">Only <strong>{{ vulnerability.sample_rows }}</strong> sample row(s) exist. No real barangay vulnerability data has been entered, so no figures are shown.</p>
+        {% else %}
+            <p><strong>{{ '{:,}'.format(vulnerability.real_population) }}</strong> residents recorded across {{ vulnerability.rows_total - vulnerability.sample_rows }} barangay(s).</p>
+        {% endif %}
+        <a class="link" href="{{ url_for('vulnerability_dashboard') }}">View details {{ icon('external-link') }}</a>
+    </article>
+</section>
+
+<section id="reports" class="reports-section">
+    <div class="page-head tight">
+        <h2>Incident reports <span class="muted small">({{ filtered_total }}{% if status_filter or type_filter %} matching{% endif %})</span></h2>
+        <form method="GET" action="{{ url_for('dashboard') }}#reports" class="filters">
+            <label class="visually-hidden" for="f-status">Status</label>
+            <select id="f-status" name="status">
+                <option value="">All statuses</option>
+                {% for key, label in STATUS_LABELS.items() %}<option value="{{ key }}" {% if status_filter == key %}selected{% endif %}>{{ label }}</option>{% endfor %}
+            </select>
+            <label class="visually-hidden" for="f-type">Incident type</label>
+            <select id="f-type" name="type">
+                <option value="">All types</option>
+                {% for key, label in INCIDENT_TYPES.items() %}<option value="{{ key }}" {% if type_filter == key %}selected{% endif %}>{{ label }}</option>{% endfor %}
+            </select>
+            <button class="btn btn-primary btn-sm" type="submit">Filter</button>
+            {% if status_filter or type_filter %}<a class="btn btn-ghost btn-sm" href="{{ url_for('dashboard') }}#reports">Clear</a>{% endif %}
+        </form>
+    </div>
+
+    <div class="table-wrap">
+    {% if reports %}
+        <table>
+            <thead><tr><th>ID</th><th>Incident</th><th>Location</th><th>Incident time</th><th>Submitted</th><th>Photo</th><th>Status</th><th><span class="visually-hidden">Actions</span></th></tr></thead>
+            <tbody>
+            {% for report in reports %}
+                <tr>
+                    <td>#{{ report['id'] }}</td>
+                    <td>{{ INCIDENT_TYPES.get(report['incident_type'], 'Other emergency') }}</td>
+                    <td>{{ report['incident_location'] }}</td>
+                    <td>{% if report['time_unknown'] %}Unknown{% elif report['incident_time'] %}{{ report['incident_time'] | incident_datetime }}{% else %}Not provided{% endif %}</td>
+                    <td>{{ report['submitted_at'] | ph_datetime }}</td>
+                    <td>{% if report['photo_path'] %}{{ icon('image', 'Has photo') }}{% else %}<span class="muted">—</span>{% endif %}</td>
+                    <td><span class="badge badge-{{ report['status'] }}">{{ STATUS_LABELS.get(report['status'], report['status']|title) }}</span></td>
+                    <td class="actions">
+                        <a class="btn btn-secondary btn-sm" href="{{ url_for('report_details', report_id=report['id']) }}">Review</a>
+                        {% if report['latitude'] is not none and report['longitude'] is not none %}
+                        <a class="btn btn-ghost btn-sm" href="{{ url_for('map_page', focus=report['latitude'] ~ ',' ~ report['longitude']) }}" title="Show on map" aria-label="Show report #{{ report['id'] }} on map">{{ icon('map-pin') }}</a>
+                        {% endif %}
+                    </td>
+                </tr>
+            {% endfor %}
+            </tbody>
+        </table>
+    {% else %}
+        <p class="empty">{% if status_filter or type_filter %}No reports match these filters.{% else %}No incident reports yet. Submitted reports will appear here.{% endif %}</p>
+    {% endif %}
+    </div>
+
+    {% if pages > 1 %}
+    <nav class="pager" aria-label="Report pages">
+        {% if page > 1 %}<a class="btn btn-secondary btn-sm" href="{{ url_for('dashboard', status=status_filter or None, type=type_filter or None, page=page-1) }}#reports">Previous</a>{% endif %}
+        <span class="muted small">Page {{ page }} of {{ pages }}</span>
+        {% if page < pages %}<a class="btn btn-secondary btn-sm" href="{{ url_for('dashboard', status=status_filter or None, type=type_filter or None, page=page+1) }}#reports">Next</a>{% endif %}
+    </nav>
+    {% endif %}
+</section>
+{% endblock %}

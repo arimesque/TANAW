@@ -1,0 +1,27 @@
+.report-intro { max-width: 680px; margin-bottom: 1.2rem; }
+.report-intro .alert { margin-top: 1rem; }
+.report-layout { display: grid; grid-template-columns: 1fr 1fr; gap: 1.2rem; align-items: start; }
+.panel { background: #fff; border: 1px solid var(--border); border-radius: var(--radius); padding: 1.4rem; box-shadow: var(--shadow); min-width: 0; }
+.panel h2 { display: flex; align-items: center; gap: .6rem; margin-bottom: .4rem; }
+.step { display: inline-flex; width: 28px; height: 28px; border-radius: 8px; background: var(--blue-light); color: var(--blue); align-items: center; justify-content: center; font-size: .85rem; }
+.panel .form-label { margin-top: 1.2rem; }
+fieldset { border: 0; min-width: 0; }
+.type-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(135px, 1fr)); gap: .5rem; }
+.type-option input { position: absolute; opacity: 0; width: 1px; height: 1px; }
+.type-card { display: flex; align-items: center; gap: .5rem; min-height: 48px; padding: .5rem .75rem; border: 1px solid #9fb2c3; border-radius: 8px; background: #fff; cursor: pointer; font-size: .9rem; font-weight: 600; }
+.type-card:hover { background: var(--blue-light); }
+.type-option input:checked + .type-card { border-color: var(--blue); background: var(--blue-light); box-shadow: inset 0 0 0 1px var(--blue); color: var(--blue-dark); }
+.type-option input:focus-visible + .type-card { outline: 3px solid #2f80c8; outline-offset: 2px; }
+.check-row { display: flex; align-items: center; gap: .6rem; margin-top: .7rem; font-size: .92rem; cursor: pointer; min-height: 32px; }
+.check-row input { width: 20px; height: 20px; accent-color: var(--blue); }
+#report-map { height: 300px; margin-top: .8rem; border: 1px solid var(--border); border-radius: 8px; overflow: hidden; }
+.photo-buttons { margin-top: .4rem; }
+.photo-buttons .btn { cursor: pointer; }
+.visually-hidden:focus-visible + .btn { outline: 3px solid #2f80c8; }
+.photo-preview { margin-top: 1rem; }
+.photo-preview img { display: block; width: 100%; max-height: 260px; object-fit: contain; background: var(--page-bg); border: 1px solid var(--border); border-radius: 8px; }
+.submit-btn { margin-top: 1.6rem; min-height: 48px; font-size: 1rem; }
+.tmarker { width: 34px; height: 34px; border-radius: 50% 50% 50% 0; transform: rotate(-45deg); border: 2px solid #fff; background: var(--c-incident); box-shadow: 0 2px 6px rgba(0,0,0,.35); display: flex; align-items: center; justify-content: center; color: #fff; }
+.tmarker svg { transform: rotate(45deg); width: 17px; height: 17px; }
+.leaflet-div-icon.tdivicon { background: none; border: 0; }
+@media (max-width: 800px) { .report-layout { grid-template-columns: 1fr; } #report-map { height: 260px; } }

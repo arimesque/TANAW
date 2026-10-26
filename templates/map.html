@@ -1,0 +1,108 @@
+{% extends "base.html" %}
+{% from "_macros.html" import icon %}
+{% block title %}Public map{% endblock %}
+{% block head %}
+<link rel="stylesheet" href="{{ url_for('static', filename='vendor/leaflet/leaflet.css') }}">
+<link rel="stylesheet" href="{{ url_for('static', filename='css/map.css') }}">
+{% endblock %}
+{% block body_class %}map-body{% endblock %}
+{% block main_class %}map-main{% endblock %}
+{% block footer %}{% endblock %}
+
+{% block content %}
+<div class="map-layout">
+    <section class="map-stage" aria-label="Map">
+        <form id="place-search-form" class="map-search" role="search" autocomplete="off">
+            <label for="place-search" class="visually-hidden">Search for a place, address or saved marking</label>
+            <span class="map-search-icon">{{ icon('search') }}</span>
+            <input type="search" id="place-search" placeholder="Search a place, address or marking" maxlength="200" required>
+            <button type="submit" class="btn btn-primary btn-sm">Search</button>
+            <ul id="search-results" class="search-results" hidden></ul>
+        </form>
+
+        <div id="tanaw-map"
+             data-is-admin="{{ 'true' if is_admin else 'false' }}"
+             data-boundary-url="{{ url_for('static', filename='data/bacolor_barangays.geojson') }}"
+             data-marker-image-path="{{ url_for('static', filename='vendor/leaflet/images/') }}"
+             role="application" aria-label="Interactive map of Bacolor, Pampanga"></div>
+        <div id="map-loading" class="map-loading" role="status">Loading map data…</div>
+    </section>
+
+    <aside class="map-panel" aria-label="Map controls">
+        <p id="map-message" class="map-message" role="status" aria-live="polite">Map ready.</p>
+
+        <details class="panel-section" open>
+            <summary>{{ icon('layers') }} Layers <span class="chev">{{ icon('chevron-down') }}</span></summary>
+            <div class="panel-body">
+                {% for key, label in MARKING_CATEGORIES.items() %}
+                <label class="layer-option">
+                    <input type="checkbox" class="category-filter" value="{{ key }}" checked>
+                    <span class="swatch cat-{{ key }}">{{ icon({'incident':'triangle-alert','facility':'building-2','evacuation_center':'house','hazard':'octagon-alert','other':'map-pin'}[key]) }}</span>
+                    <span class="layer-label">{{ label }}s</span>
+                    <span class="layer-count" data-count="{{ key }}">0</span>
+                </label>
+                {% endfor %}
+                <label class="layer-option boundary-option">
+                    <input type="checkbox" id="show-barangays">
+                    <span class="swatch swatch-outline">{{ icon('map') }}</span>
+                    <span class="layer-label">Barangay boundaries</span>
+                </label>
+                <p id="boundary-note" class="field-help">Boundaries are generalised PSA/NAMRIA outlines, shown for reference only.</p>
+            </div>
+        </details>
+
+        <details class="panel-section" id="legend-section" open>
+            <summary>{{ icon('info') }} Legend <span class="chev">{{ icon('chevron-down') }}</span></summary>
+            <ul class="panel-body legend-list" id="legend-list"></ul>
+        </details>
+
+        {% if is_admin %}
+        <details class="panel-section" open>
+            <summary>{{ icon('pencil') }} Manage markings <span class="chev">{{ icon('chevron-down') }}</span></summary>
+            <div class="panel-body">
+                <button type="button" id="add-marking" class="btn btn-primary btn-block">{{ icon('plus') }} Add map marking</button>
+                <p id="marking-hint" class="field-help">Choose “Add map marking”, then click the map to place it. Click an existing marker to edit or delete it.</p>
+
+                <form id="marking-form" class="marking-form" hidden novalidate>
+                    <h3 id="marking-form-title">Add map marking</h3>
+
+                    <label for="marking-name">Name <span class="req">*</span></label>
+                    <input type="text" id="marking-name" maxlength="120" required>
+                    <p class="field-error" data-error-for="name" role="alert" hidden></p>
+
+                    <label for="marking-category">Category <span class="req">*</span></label>
+                    <select id="marking-category" required>
+                        {% for key, label in MARKING_CATEGORIES.items() %}<option value="{{ key }}">{{ label }}</option>{% endfor %}
+                    </select>
+
+                    <label for="marking-location">Address or location description</label>
+                    <input type="text" id="marking-location" maxlength="250">
+
+                    <label for="marking-description">Additional details</label>
+                    <textarea id="marking-description" maxlength="1500" rows="3"></textarea>
+
+                    <div class="coord-box" id="coord-box">
+                        <span class="coord-icon">{{ icon('map-pin') }}</span>
+                        <div><strong>Location</strong><span id="selected-coordinates">Not selected yet.</span></div>
+                    </div>
+                    <p class="field-error" data-error-for="location" role="alert" hidden></p>
+                    <button type="button" id="pick-location" class="btn btn-secondary btn-sm btn-block">{{ icon('move') }} Pick location on map</button>
+                    <p class="field-help">You can also drag the blue pin.</p>
+
+                    <div class="btn-row">
+                        <button type="submit" id="save-marking" class="btn btn-primary">{{ icon('save') }} Save</button>
+                        <button type="button" id="cancel-marking" class="btn btn-secondary">{{ icon('x') }} Cancel</button>
+                    </div>
+                </form>
+            </div>
+        </details>
+        {% endif %}
+    </aside>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script src="{{ url_for('static', filename='vendor/leaflet/leaflet.js') }}"></script>
+<script src="{{ url_for('static', filename='js/icons.js') }}"></script>
+<script src="{{ url_for('static', filename='js/map.js') }}"></script>
+{% endblock %}

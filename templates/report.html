@@ -1,0 +1,100 @@
+{% extends "base.html" %}
+{% from "_macros.html" import icon, field_error %}
+{% block title %}Report an incident{% endblock %}
+{% block head %}
+<link rel="stylesheet" href="{{ url_for('static', filename='vendor/leaflet/leaflet.css') }}">
+<link rel="stylesheet" href="{{ url_for('static', filename='css/report.css') }}">
+{% endblock %}
+
+{% block content %}
+<section class="report-intro">
+    <p class="eyebrow">Incident reporting</p>
+    <h1>What happened?</h1>
+    <p class="muted">Tell MDRRMO what you saw and where. Fields marked <span class="req">*</span> are required.</p>
+    <p class="alert alert-info">{{ icon('info') }}<span><strong>In an emergency, contact emergency services directly.</strong> This form is reviewed by MDRRMO staff and is not an instant dispatch line. Your report stays <em>pending</em> until it is reviewed.</span></p>
+</section>
+
+{% if errors and errors.get('general') %}<div class="alert alert-error" role="alert">{{ icon('triangle-alert') }}<span>{{ errors['general'] }}</span></div>{% endif %}
+{% if errors and not errors.get('general') %}<div class="alert alert-error" role="alert">{{ icon('triangle-alert') }}<span>Please fix the highlighted fields below.</span></div>{% endif %}
+
+<form id="incident-form" class="report-layout" method="POST" action="{{ url_for('report_page') }}" enctype="multipart/form-data" novalidate>
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+    <input type="hidden" name="submission_token" value="{{ token }}">
+
+    <section class="panel">
+        <h2><span class="step">1</span> Incident details</h2>
+
+        <fieldset class="type-fieldset" aria-describedby="err-incident_type">
+            <legend class="form-label">Type of incident <span class="req">*</span></legend>
+            <div class="type-grid">
+                {% set type_icons = {'vehicular_accident':'car','flooding':'waves','road_obstruction':'triangle-alert','fire':'flame','other':'siren'} %}
+                {% for key, label in INCIDENT_TYPES.items() %}
+                <label class="type-option">
+                    <input type="radio" name="incident_type" value="{{ key }}" {% if form.get('incident_type') == key %}checked{% endif %} required>
+                    <span class="type-card">{{ icon(type_icons[key]) }}<span>{{ label }}</span></span>
+                </label>
+                {% endfor %}
+            </div>
+            {{ field_error(errors, 'incident_type') }}
+        </fieldset>
+
+        <label class="form-label" for="incident-time">When did it happen? <span class="req">*</span></label>
+        <input type="datetime-local" id="incident-time" name="incident_time" value="{{ form.get('incident_time','') }}"
+               {% if errors and errors.get('incident_time') %}class="is-invalid" aria-describedby="err-incident_time"{% endif %}>
+        {{ field_error(errors, 'incident_time') }}
+        <p class="field-help">Philippine time. An estimate is fine, even if you are reporting later.</p>
+        <label class="check-row" for="time-unknown">
+            <input type="checkbox" id="time-unknown" name="time_unknown" value="yes" {% if form.get('time_unknown') == 'yes' %}checked{% endif %}>
+            I don’t know the exact time
+        </label>
+
+        <label class="form-label" for="description">Describe what happened <span class="req">*</span></label>
+        <textarea id="description" name="description" rows="5" maxlength="1500" required
+                  placeholder="What did you see? Are people hurt or in danger? Anything responders should know?"
+                  {% if errors and errors.get('description') %}class="is-invalid" aria-describedby="err-description"{% endif %}>{{ form.get('description','') }}</textarea>
+        {{ field_error(errors, 'description') }}
+        <p class="field-help"><span id="desc-count">0</span> / 1,500 characters</p>
+
+        <label class="form-label" for="location">Location or nearby landmark <span class="req">*</span></label>
+        <input type="text" id="location" name="location" maxlength="250" required value="{{ form.get('location','') }}"
+               placeholder="Street, barangay, or landmark"
+               {% if errors and errors.get('location') %}class="is-invalid" aria-describedby="err-location"{% endif %}>
+        {{ field_error(errors, 'location') }}
+
+        <input type="hidden" id="latitude" name="latitude" value="{{ form.get('latitude','') }}">
+        <input type="hidden" id="longitude" name="longitude" value="{{ form.get('longitude','') }}">
+    </section>
+
+    <section class="panel">
+        <h2><span class="step">2</span> Location pin and photo</h2>
+
+        <button type="button" id="locate-button" class="btn btn-secondary">{{ icon('locate-fixed') }} Use my current location</button>
+        <p id="location-status" class="field-help" role="status">Optional, but helps responders. Tap the button, or tap the map to place the pin.</p>
+        {{ field_error(errors, 'location_pin') }}
+        <div id="report-map" role="application" aria-label="Map for placing the incident pin"></div>
+        <p class="field-help">Tap the map or drag the pin to the exact spot. Check that it matches the incident.</p>
+
+        <p class="form-label">Photo <span class="muted">(optional)</span></p>
+        <input type="file" id="photo-file" name="photo" accept="image/jpeg,image/png,image/webp" class="visually-hidden">
+        <input type="file" id="camera-file" name="camera_photo" accept="image/*" capture="environment" class="visually-hidden">
+        <div class="btn-row photo-buttons">
+            <label for="photo-file" class="btn btn-secondary">{{ icon('image') }} Choose a photo</label>
+            <label for="camera-file" class="btn btn-secondary">{{ icon('camera') }} Take a photo</label>
+        </div>
+        <p class="field-help">JPG, PNG or WEBP, up to 10 MB. Only MDRRMO staff can view it.</p>
+        {% if errors and errors.get('photo') %}{{ field_error(errors, 'photo') }}{% elif errors %}<p class="field-help">If you had attached a photo, please attach it again.</p>{% endif %}
+        <div id="photo-preview" class="photo-preview" hidden>
+            <img id="preview-image" alt="Preview of the selected incident photo">
+            <button type="button" id="remove-photo" class="btn btn-ghost btn-sm">{{ icon('trash-2') }} Remove photo</button>
+        </div>
+
+        <button type="submit" class="btn btn-primary btn-block submit-btn" id="submit-button">{{ icon('upload') }} <span>Submit report</span></button>
+    </section>
+</form>
+{% endblock %}
+
+{% block scripts %}
+<script src="{{ url_for('static', filename='vendor/leaflet/leaflet.js') }}"></script>
+<script src="{{ url_for('static', filename='js/icons.js') }}"></script>
+<script src="{{ url_for('static', filename='js/report.js') }}"></script>
+{% endblock %}

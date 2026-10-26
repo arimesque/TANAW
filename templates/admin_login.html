@@ -1,0 +1,20 @@
+{% extends "base.html" %}
+{% from "_macros.html" import icon %}
+{% block title %}Administrator sign in{% endblock %}
+{% block content %}
+<section class="narrow-card">
+    <p class="eyebrow">MDRRMO</p>
+    <h1>Administrator sign in</h1>
+    <p class="muted">Authorised personnel only.</p>
+    <form method="POST" action="{{ url_for('admin_login') }}" class="form-stack">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+        {% if next_page %}<input type="hidden" name="next" value="{{ next_page }}">{% endif %}
+        <label for="username">Username</label>
+        <input id="username" type="text" name="username" autocomplete="username" required maxlength="80" autofocus>
+        <label for="password">Password</label>
+        <input id="password" type="password" name="password" autocomplete="current-password" required>
+        <button class="btn btn-primary btn-block" type="submit">{{ icon('log-in') }} Sign in</button>
+    </form>
+    <p><a class="link" href="{{ url_for('home') }}">{{ icon('arrow-left') }} Return to homepage</a></p>
+</section>
+{% endblock %}

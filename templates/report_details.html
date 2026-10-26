@@ -1,0 +1,59 @@
+{% extends "base.html" %}
+{% from "_macros.html" import icon %}
+{% block title %}Report #{{ report['id'] }}{% endblock %}
+{% block head %}<link rel="stylesheet" href="{{ url_for('static', filename='css/admin.css') }}">{% endblock %}
+{% block content %}
+<a class="link" href="{{ url_for('dashboard') }}">{{ icon('arrow-left') }} Back to dashboard</a>
+<div class="page-head">
+    <div>
+        <p class="eyebrow">MDRRMO dashboard / report details</p>
+        <h1>Incident report #{{ report['id'] }}</h1>
+    </div>
+    <span class="badge badge-{{ report['status'] }}">{{ STATUS_LABELS.get(report['status'], report['status']|title) }}</span>
+</div>
+
+<div class="detail-layout">
+    <section class="card details">
+        <dl>
+            <div><dt>Incident type</dt><dd>{{ INCIDENT_TYPES.get(report['incident_type'], 'Other emergency') }}</dd></div>
+            <div><dt>Description</dt><dd class="prewrap">{{ report['description'] }}</dd></div>
+            <div><dt>Reported location</dt><dd>{{ report['incident_location'] }}</dd></div>
+            <div><dt>Map coordinates</dt><dd>{% if report['latitude'] is not none and report['longitude'] is not none %}{{ '%.6f'|format(report['latitude']) }}, {{ '%.6f'|format(report['longitude']) }}{% else %}No map coordinates provided{% endif %}</dd></div>
+            <div><dt>Incident date and time (PHT)</dt><dd>{% if report['time_unknown'] %}Unknown{% elif report['incident_time'] %}{{ report['incident_time'] | incident_datetime }}{% else %}Not provided{% endif %}</dd></div>
+            <div><dt>Submitted (PHT)</dt><dd>{{ report['submitted_at'] | ph_datetime }}</dd></div>
+            {% if report['reviewed_at'] %}<div><dt>Last reviewed</dt><dd>{{ report['reviewed_at'] | ph_datetime }} by {{ report['reviewed_by'] }}</dd></div>{% endif %}
+            <div><dt>Attached photo</dt><dd>
+                {% if report['photo_path'] %}
+                <a href="{{ url_for('incident_photo', filename=report['photo_path']) }}" target="_blank" rel="noopener noreferrer"><img class="incident-photo" src="{{ url_for('incident_photo', filename=report['photo_path']) }}" alt="Photo attached to incident report #{{ report['id'] }}" loading="lazy"></a>
+                {% else %}No photo attached{% endif %}
+            </dd></div>
+        </dl>
+    </section>
+
+    <aside class="side-stack">
+        <section class="card">
+            <h2>Review status</h2>
+            <p class="muted small">Public reports stay pending until staff review them. Changes are recorded in the audit log.</p>
+            <form method="POST" action="{{ url_for('update_report_status', report_id=report['id']) }}" class="form-stack">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                <label for="status">Set status</label>
+                <select id="status" name="status">
+                    {% for key in report_statuses %}<option value="{{ key }}" {% if report['status'] == key %}selected{% endif %}>{{ STATUS_LABELS[key] }}</option>{% endfor %}
+                </select>
+                <button class="btn btn-primary btn-block" type="submit">{{ icon('save') }} Save status</button>
+            </form>
+        </section>
+
+        {% if report['latitude'] is not none and report['longitude'] is not none %}
+        <section class="card">
+            <h2>Map</h2>
+            <div class="btn-row stack">
+                <a class="btn btn-secondary" href="{{ url_for('map_page', focus=report['latitude'] ~ ',' ~ report['longitude']) }}">{{ icon('map-pin') }} Show on map</a>
+                <a class="btn btn-secondary" href="{{ url_for('map_page', add=1, lat=report['latitude'], lng=report['longitude'], name=INCIDENT_TYPES.get(report['incident_type'], 'Incident') ~ ' (report #' ~ report['id'] ~ ')', category='incident', location=report['incident_location']) }}">{{ icon('plus') }} Create map marking</a>
+            </div>
+            <p class="field-help">Creating a marking opens the map with these details filled in. Nothing is published until you save it.</p>
+        </section>
+        {% endif %}
+    </aside>
+</div>
+{% endblock %}

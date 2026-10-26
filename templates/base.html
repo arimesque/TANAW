@@ -1,0 +1,64 @@
+{% from "_macros.html" import icon %}
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="csrf-token" content="{{ csrf_token() }}">
+    <title>{% block title %}TANAW{% endblock %} | MDRRMO Bacolor</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+    {% block head %}{% endblock %}
+</head>
+<body class="{% block body_class %}{% endblock %}">
+    <a class="skip-link" href="#main">Skip to main content</a>
+
+    <header class="navbar">
+        <a href="{{ url_for('home') }}" class="brand" aria-label="TANAW home">
+            <span class="brand-mark">{{ icon('map-pinned') }}</span><span>TANAW</span>
+        </a>
+
+        <button type="button" class="nav-toggle" id="nav-toggle" aria-expanded="false"
+                aria-controls="site-nav" aria-label="Open menu">{{ icon('menu') }}</button>
+
+        <nav class="nav-links" id="site-nav" aria-label="Main">
+            <a href="{{ url_for('home') }}" {% if request.endpoint == 'home' %}aria-current="page"{% endif %}>Home</a>
+            <a href="{{ url_for('map_page') }}" {% if request.endpoint == 'map_page' %}aria-current="page"{% endif %}>{{ icon('map') }} Public map</a>
+            <a href="{{ url_for('report_page') }}" {% if request.endpoint == 'report_page' %}aria-current="page"{% endif %}>{{ icon('siren') }} Report an incident</a>
+            {% if is_admin %}
+            <a href="{{ url_for('dashboard') }}" {% if request.endpoint and request.endpoint.startswith(('dashboard','report_details','vulnerability')) %}aria-current="page"{% endif %}>{{ icon('layout-dashboard') }} Dashboard</a>
+            <form action="{{ url_for('admin_logout') }}" method="POST" class="inline-form">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                <button type="submit" class="btn btn-ghost btn-sm">{{ icon('log-out') }} Log out</button>
+            </form>
+            {% else %}
+            <a href="{{ url_for('admin_login') }}" class="nav-admin">{{ icon('lock') }} Admin</a>
+            {% endif %}
+        </nav>
+    </header>
+
+    <main id="main" class="{% block main_class %}page{% endblock %}">
+        {% with messages = get_flashed_messages(with_categories=true) %}
+        {% if messages %}
+        <div class="flash-stack">
+            {% for category, message in messages %}
+            <div class="alert alert-{{ category if category in ('success','error','info') else 'info' }}" role="{{ 'alert' if category == 'error' else 'status' }}">
+                {{ icon({'success':'circle-check','error':'triangle-alert'}.get(category,'info')) }}<span>{{ message }}</span>
+            </div>
+            {% endfor %}
+        </div>
+        {% endif %}
+        {% endwith %}
+        {% block content %}{% endblock %}
+    </main>
+
+    {% block footer %}
+    <footer class="footer">
+        <p><strong>TANAW</strong> · Territorial Analysis and Network for Accident Watch</p>
+        <p>Prototype for MDRRMO Bacolor, Pampanga. Not an emergency dispatch service. In an emergency, contact the appropriate emergency service directly.</p>
+    </footer>
+    {% endblock %}
+
+    <script src="{{ url_for('static', filename='js/common.js') }}"></script>
+    {% block scripts %}{% endblock %}
+</body>
+</html>

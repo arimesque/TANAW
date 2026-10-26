@@ -1,0 +1,35 @@
+{% extends "base.html" %}
+{% from "_macros.html" import icon %}
+{% block title %}Home{% endblock %}
+{% block main_class %}{% endblock %}
+{% block content %}
+<section class="hero">
+    <div class="hero-text">
+        <p class="eyebrow">MDRRMO Bacolor, Pampanga</p>
+        <h1>See what’s happening.<br><span>Know where to go.</span></h1>
+        <p class="lead">TANAW is a community incident monitoring and mapping system for Bacolor. Find evacuation centers, facilities and mapped hazards, and report incidents for MDRRMO review.</p>
+        <div class="btn-row">
+            <a href="{{ url_for('map_page') }}" class="btn btn-primary">{{ icon('map') }} Explore the map</a>
+            <a href="{{ url_for('report_page') }}" class="btn btn-secondary">{{ icon('siren') }} Report an incident</a>
+        </div>
+        <p class="small muted">For emergencies, contact the appropriate emergency services directly.</p>
+    </div>
+    <ul class="legend-card" aria-label="What the map shows">
+        <li><span class="swatch cat-incident">{{ icon('triangle-alert') }}</span><div><strong>Incidents</strong><span>Reported and confirmed events</span></div></li>
+        <li><span class="swatch cat-evacuation_center">{{ icon('house') }}</span><div><strong>Evacuation centers</strong><span>Where to go for shelter</span></div></li>
+        <li><span class="swatch cat-facility">{{ icon('building-2') }}</span><div><strong>Facilities</strong><span>MDRRMO and other key locations</span></div></li>
+        <li><span class="swatch cat-hazard">{{ icon('octagon-alert') }}</span><div><strong>Hazards</strong><span>Flood-prone and risky areas</span></div></li>
+    </ul>
+</section>
+
+<section class="section alt">
+    <div class="container">
+        <h2>How it works</h2>
+        <div class="card-grid">
+            <article class="card"><span class="card-icon">{{ icon('map') }}</span><h3>Explore the map</h3><p>Filter by category, search a place or barangay, and view barangay boundaries.</p><a class="link" href="{{ url_for('map_page') }}">Open the map</a></article>
+            <article class="card"><span class="card-icon">{{ icon('camera') }}</span><h3>Report an incident</h3><p>Describe what happened, pin the location and add an optional photo.</p><a class="link" href="{{ url_for('report_page') }}">Start a report</a></article>
+            <article class="card"><span class="card-icon">{{ icon('shield-check') }}</span><h3>Reviewed by MDRRMO</h3><p>Public reports stay <em>pending</em> until authorised personnel review them. Submitting a report does not verify it.</p></article>
+        </div>
+    </div>
+</section>
+{% endblock %}

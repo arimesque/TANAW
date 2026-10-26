@@ -1,0 +1,46 @@
+const { JSDOM, VirtualConsole } = require("jsdom");
+const BASE = "http://127.0.0.1:5055";
+let f = 0, p = 0; const check = (c, l) => { c ? p++ : f++; console.log(c ? "  PASS" : "  FAIL", l); };
+const sleep = ms => new Promise(r => setTimeout(r, ms));
+(async () => {
+  const errors = []; const vc = new VirtualConsole();
+  vc.on("jsdomError", e => { if (!/Could not load|tile|Not implemented/.test(String(e.message))) errors.push(String(e.message)); });
+  const html = await (await fetch(BASE + "/report")).text();
+  let geoCalls = 0;
+  const dom = new JSDOM(html, { url: BASE + "/report", runScripts: "dangerously", resources: "usable", pretendToBeVisual: true, virtualConsole: vc,
+    beforeParse(w) {
+      Object.defineProperty(w.HTMLElement.prototype, "clientWidth", { get() { return 600; } });
+      Object.defineProperty(w.HTMLElement.prototype, "clientHeight", { get() { return 300; } });
+      w.SVGElement.prototype.createSVGRect = () => ({});
+      w.URL.createObjectURL = () => "blob:x"; w.URL.revokeObjectURL = () => {};
+      w.alert = () => {};
+      Object.defineProperty(w.navigator, "geolocation", { value: { getCurrentPosition: (ok) => { geoCalls++; ok({ coords: { latitude: 15.001, longitude: 120.651, accuracy: 12 } }); } } });
+    } });
+  const w = dom.window, d = w.document;
+  await new Promise(r => w.addEventListener("load", r)); await sleep(500);
+  check(geoCalls === 0, "no location permission request on page load");
+  d.getElementById("locate-button").click(); await sleep(50);
+  check(geoCalls === 1 && d.getElementById("latitude").value === "15.001000" && d.getElementById("longitude").value === "120.651000", "location button sets hidden coordinates");
+  check(!!d.querySelector(".tmarker"), "pin shown on map");
+  d.getElementById("report-map").dispatchEvent(new w.MouseEvent("click", { bubbles: true, clientX: 100, clientY: 100 }));
+  check(d.getElementById("latitude").value !== "15.001000", "tapping map moves the pin");
+  const tu = d.getElementById("time-unknown"), ti = d.getElementById("incident-time");
+  ti.value = "2024-01-01T10:00"; tu.checked = true; tu.dispatchEvent(new w.Event("change"));
+  check(ti.disabled && ti.value === "" && !ti.required, "unknown time disables and clears the time field");
+  tu.checked = false; tu.dispatchEvent(new w.Event("change"));
+  check(!ti.disabled && ti.required, "unchecking restores required time field");
+  check(!!ti.max, "future times are blocked via max attribute");
+  const desc = d.getElementById("description"); desc.value = "hello"; desc.dispatchEvent(new w.Event("input"));
+  check(d.getElementById("desc-count").textContent === "5", "character counter updates");
+  const form = d.getElementById("incident-form"), btn = d.getElementById("submit-button");
+  let prevented = 0; form.addEventListener("submit", e => { if (e.defaultPrevented) prevented++; e.preventDefault(); });
+  form.dispatchEvent(new w.Event("submit", { cancelable: true, bubbles: true }));
+  check(!btn.disabled, "invalid form is not submitted and button stays enabled");
+  d.querySelector('input[name="incident_type"]').checked = true; ti.value = "2024-01-01T10:00"; d.getElementById("location").value = "Here";
+  form.dispatchEvent(new w.Event("submit", { cancelable: true, bubbles: true }));
+  check(btn.disabled && /Submitting/.test(btn.textContent), "valid submit disables the button");
+  form.dispatchEvent(new w.Event("submit", { cancelable: true, bubbles: true }));
+  check(prevented >= 1, "second submit is blocked");
+  check(errors.length === 0, "no JavaScript errors" + (errors.length ? ": " + errors.join("|") : ""));
+  console.log(`${p} passed, ${f} failed`); process.exit(f ? 1 : 0);
+})();

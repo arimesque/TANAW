@@ -1,0 +1,15 @@
+{% extends "base.html" %}
+{% from "_macros.html" import icon %}
+{% block title %}Report received{% endblock %}
+{% block content %}
+<section class="narrow-card center">
+    <span class="big-icon ok">{{ icon('circle-check') }}</span>
+    <h1>Report received</h1>
+    <p>Thank you. Your report (reference <strong>#{{ report_id }}</strong>) was saved and is <strong>pending review</strong> by MDRRMO personnel.</p>
+    <p class="muted">Submitting a report does not verify it or publish it on the public map. Reviewers may not respond individually. For an actual emergency, contact emergency services directly.</p>
+    <p class="btn-row">
+        <a class="btn btn-primary" href="{{ url_for('map_page') }}">{{ icon('map') }} View the map</a>
+        <a class="btn btn-secondary" href="{{ url_for('report_page') }}">Submit another report</a>
+    </p>
+</section>
+{% endblock %}

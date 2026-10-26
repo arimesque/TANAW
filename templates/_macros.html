@@ -1,0 +1,9 @@
+{# Inline SVG icon from the vendored Lucide sprite. Decorative unless a label is given. #}
+{% macro icon(name, label=None) -%}
+<svg class="icon" {% if label %}role="img" aria-label="{{ label }}"{% else %}aria-hidden="true" focusable="false"{% endif %}><use href="{{ url_for('static', filename='icons/sprite.svg') }}#{{ name }}"></use></svg>
+{%- endmacro %}
+
+{# Field error shown next to its input. #}
+{% macro field_error(errors, key) -%}
+{% if errors and errors.get(key) %}<p class="field-error" id="err-{{ key }}" role="alert">{{ errors[key] }}</p>{% endif %}
+{%- endmacro %}
