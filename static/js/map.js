@@ -25,6 +25,20 @@
         other:             { label: "Other",             plural: "Other locations",    color: "#546e7a", icon: "map-pin",        hint: "Other mapped places" }
     };
 
+    /* Specific types, grouped under the categories above. Mirrors MARKING_TYPES
+       in app.py; "temporary" types can be resolved or given an expiry date. */
+    var TYPES = {
+        flooded_road:       { category: "hazard",   label: "Flooded road",           icon: "waves",        temporary: true },
+        road_construction:  { category: "hazard",   label: "Road construction",      icon: "construction", temporary: true },
+        closed_road:        { category: "hazard",   label: "Closed road",            icon: "ban",          temporary: true },
+        road_damage:        { category: "hazard",   label: "Potholes / road damage", icon: "circle-dot",   temporary: true },
+        fallen_tree_debris: { category: "incident", label: "Fallen tree / debris",   icon: "tree-pine",    temporary: true },
+        landslide:          { category: "incident", label: "Landslide",              icon: "mountain",     temporary: true },
+        barangay_hall:      { category: "facility", label: "Barangay hall",          icon: "landmark",     temporary: false },
+        health_center:      { category: "facility", label: "Health center",          icon: "hospital",     temporary: false },
+        fire_station:       { category: "facility", label: "Fire station",           icon: "flame",        temporary: false }
+    };
+
     var DEFAULT_VIEW = { center: [15.0, 120.652], zoom: 13 };
 
     /* ---------- Map setup ---------- */
@@ -45,6 +59,7 @@
         categoryLayers[key] = L.layerGroup().addTo(map);
     });
     var markerById = new Map();
+    var showInactive = document.getElementById("show-inactive");
 
     /* ---------- Small helpers ---------- */
     var messageEl = document.getElementById("map-message");
@@ -75,9 +90,24 @@
         return CATEGORIES[key] ? key : "other";
     }
 
+    /* A known type of this marking in its category, else null. */
+    function typeOf(marking) {
+        var t = TYPES[String(marking.marking_type || "")];
+        return t && t.category === categoryOf(marking) ? t : null;
+    }
+
+    /* Resolved or expired markings stay on record but are dimmed and hidden by default. */
+    function isActive(marking) { return marking.is_active !== false; }
+
+    function stateLabel(marking) {
+        if (isActive(marking)) { return ""; }
+        return marking.status === "resolved" ? "Resolved" : "Expired";
+    }
+
     /* ---------- Markers ---------- */
-    function markerIcon(categoryKey, extraClass) {
+    function markerIcon(categoryKey, extraClass, typeInfo) {
         var cat = CATEGORIES[categoryKey];
+        if (typeInfo) { cat = { icon: typeInfo.icon }; }
         return L.divIcon({
             className: "tdivicon",
             html: '<div class="tmarker cat-' + categoryKey + (extraClass ? " " + extraClass : "") + '">' + api.iconSvg(cat.icon, 17) + "</div>",
@@ -94,9 +124,16 @@
 
         var chip = el("span", "pop-cat");
         chip.style.background = cat.color;
-        chip.innerHTML = api.iconSvg(cat.icon, 13);
-        chip.appendChild(document.createTextNode(cat.label));
+        var typeInfo = typeOf(marking);
+        chip.innerHTML = api.iconSvg(typeInfo ? typeInfo.icon : cat.icon, 13);
+        chip.appendChild(document.createTextNode(typeInfo ? cat.label + " · " + typeInfo.label : cat.label));
         box.appendChild(chip);
+        if (stateLabel(marking)) {
+            var state = el("span", "pop-cat", stateLabel(marking));
+            state.style.background = "#546e7a";
+            state.style.marginLeft = "6px";
+            box.appendChild(state);
+        }
 
         box.appendChild(el("h3", "pop-title", marking.name || "Untitled marking"));
 
@@ -109,8 +146,24 @@
         if (marking.description) {
             box.appendChild(el("p", "pop-line", marking.description));
         }
+        if (marking.expires_at) { box.appendChild(el("p", "pop-meta", "Expires " + formatDate(marking.expires_at + "T00:00:00+08:00"))); }
         var updated = formatDate(marking.updated_at);
         if (updated) { box.appendChild(el("p", "pop-meta", "Updated " + updated)); }
+
+        /* Directions, stage 1: hand the destination to an external navigation app. */
+        var dest = Number(marking.latitude) + "," + Number(marking.longitude);
+        var links = el("div", "pop-actions");
+        [["Open in Google Maps", "https://www.google.com/maps/dir/?api=1&destination=" + dest, "map"],
+         ["Open in Waze", "https://waze.com/ul?ll=" + dest + "&navigate=yes", "navigation"]].forEach(function (def) {
+            var a = el("a", "btn btn-secondary btn-sm");
+            a.href = def[1];
+            a.target = "_blank";
+            a.rel = "noopener noreferrer";
+            a.innerHTML = api.iconSvg(def[2], 14);
+            a.appendChild(document.createTextNode(" " + def[0]));
+            links.appendChild(a);
+        });
+        box.appendChild(links);
 
         if (isAdmin) {
             var actions = el("div", "pop-actions");
@@ -144,14 +197,21 @@
         removeMarker(marking.id);
 
         var key = categoryOf(marking);
+        var typeInfo = typeOf(marking);
+        var what = typeInfo ? typeInfo.label : CATEGORIES[key].label;
         var marker = L.marker([lat, lon], {
-            icon: markerIcon(key),
-            title: (marking.name || "Marking") + " (" + CATEGORIES[key].label + ")",
-            alt: (marking.name || "Marking") + ", " + CATEGORIES[key].label,
+            icon: markerIcon(key, null, typeInfo),
+            title: (marking.name || "Marking") + " (" + what + (stateLabel(marking) ? ", " + stateLabel(marking).toLowerCase() : "") + ")",
+            alt: (marking.name || "Marking") + ", " + what,
+            opacity: isActive(marking) ? 1 : 0.5,
             riseOnHover: true
         });
         marker.bindPopup(buildPopup(marking), { maxWidth: 280 });
-        marker.addTo(categoryLayers[key]);
+        marker.on("click", function (event) {
+            L.DomEvent.stopPropagation(event);
+            marker.openPopup();
+        });
+        if (isActive(marking) || (showInactive && showInactive.checked)) { marker.addTo(categoryLayers[key]); }
         markerById.set(marking.id, { marker: marker, marking: marking, category: key });
         return true;
     }
@@ -166,7 +226,9 @@
 
     function updateCounts() {
         var counts = {};
-        markerById.forEach(function (entry) { counts[entry.category] = (counts[entry.category] || 0) + 1; });
+        markerById.forEach(function (entry) {
+            if (isActive(entry.marking)) { counts[entry.category] = (counts[entry.category] || 0) + 1; }
+        });
         document.querySelectorAll("[data-count]").forEach(function (node) {
             node.textContent = counts[node.dataset.count] || 0;
         });
@@ -184,6 +246,16 @@
     document.querySelectorAll(".category-filter").forEach(function (box) {
         box.addEventListener("change", applyFilters);
     });
+
+    function applyInactiveFilter() {
+        markerById.forEach(function (entry) {
+            var layer = categoryLayers[entry.category];
+            var visible = isActive(entry.marking) || showInactive.checked;
+            if (visible && !layer.hasLayer(entry.marker)) { entry.marker.addTo(layer); }
+            if (!visible && layer.hasLayer(entry.marker)) { layer.removeLayer(entry.marker); }
+        });
+    }
+    if (showInactive) { showInactive.addEventListener("change", applyInactiveFilter); }
 
     function ensureCategoryVisible(key) {
         var box = document.querySelector('.category-filter[value="' + key + '"]');
@@ -205,6 +277,21 @@
             li.appendChild(swatch);
             li.appendChild(text);
             list.appendChild(li);
+        });
+
+        var typeList = document.getElementById("legend-types");
+        if (!typeList) { return; }
+        Object.keys(TYPES).forEach(function (key) {
+            var type = TYPES[key];
+            var li = el("li");
+            var swatch = el("span", "swatch cat-" + type.category);
+            swatch.innerHTML = api.iconSvg(type.icon, 14);
+            var text = el("span");
+            text.appendChild(el("strong", "", type.label));
+            text.appendChild(el("small", "", CATEGORIES[type.category].label + (type.temporary ? " · temporary" : "")));
+            li.appendChild(swatch);
+            li.appendChild(text);
+            typeList.appendChild(li);
         });
     })();
 
@@ -388,8 +475,10 @@
                 if ((m.name || "").toLowerCase().indexOf(needle) !== -1 || (m.location || "").toLowerCase().indexOf(needle) !== -1) { local.push(entry); }
             });
             local.slice(0, 5).forEach(function (entry) {
-                addResult(entry.marking.name + " · " + CATEGORIES[entry.category].label, CATEGORIES[entry.category].icon, function () {
+                var foundType = typeOf(entry.marking);
+                addResult(entry.marking.name + " · " + (foundType ? foundType.label : CATEGORIES[entry.category].label), foundType ? foundType.icon : CATEGORIES[entry.category].icon, function () {
                     ensureCategoryVisible(entry.category);
+                    if (!isActive(entry.marking) && showInactive && !showInactive.checked) { showInactive.checked = true; applyInactiveFilter(); }
                     map.setView(entry.marker.getLatLng(), 17);
                     entry.marker.openPopup();
                 });
@@ -495,6 +584,31 @@
         showCoords();
     }
 
+    /* Type list follows the chosen category; status/expiry only for temporary types. */
+    function fillTypes(selected) {
+        var select = field("marking-type");
+        var category = field("marking-category").value;
+        select.innerHTML = "";
+        var none = el("option", "", "General (no specific type)");
+        none.value = "";
+        select.appendChild(none);
+        Object.keys(TYPES).forEach(function (key) {
+            if (TYPES[key].category !== category) { return; }
+            var option = el("option", "", TYPES[key].label);
+            option.value = key;
+            select.appendChild(option);
+        });
+        select.value = selected && TYPES[selected] && TYPES[selected].category === category ? selected : "";
+        select.disabled = select.options.length < 2;
+        toggleStatusFields();
+    }
+
+    function toggleStatusFields() {
+        var temporary = !!(TYPES[field("marking-type").value] && TYPES[field("marking-type").value].temporary);
+        field("marking-status-fields").hidden = !temporary;
+        if (!temporary) { field("marking-status").value = "active"; field("marking-expires").value = ""; }
+    }
+
     function closeForm() {
         setPicking(false);
         if (selectionMarker) { map.removeLayer(selectionMarker); selectionMarker = null; }
@@ -524,6 +638,7 @@
         openForm("Add map marking");
         field("marking-name").value = prefill.name || "";
         field("marking-category").value = CATEGORIES[prefill.category] ? prefill.category : "incident";
+        fillTypes("");
         field("marking-location").value = prefill.location || "";
         field("marking-description").value = prefill.description || "";
         if (prefill.coords) {
@@ -543,6 +658,9 @@
         openForm("Edit map marking");
         field("marking-name").value = marking.name || "";
         field("marking-category").value = categoryOf(marking);
+        fillTypes(marking.marking_type);
+        field("marking-status").value = marking.status === "resolved" ? "resolved" : "active";
+        field("marking-expires").value = marking.expires_at || "";
         field("marking-location").value = marking.location || "";
         field("marking-description").value = marking.description || "";
         placeSelection(Number(marking.latitude), Number(marking.longitude), false);
@@ -560,6 +678,9 @@
         var payload = {
             name: name,
             category: field("marking-category").value,
+            marking_type: field("marking-type").value,
+            status: field("marking-status").value,
+            expires_at: field("marking-expires").value,
             location: field("marking-location").value.trim(),
             description: field("marking-description").value.trim()
         };
@@ -575,6 +696,7 @@
             var saved = result.marking;
             if (!saved || !upsertMarker(saved)) { throw new Error("The server returned an invalid marking."); }
             ensureCategoryVisible(categoryOf(saved));
+            if (!isActive(saved) && showInactive && !showInactive.checked) { showInactive.checked = true; applyInactiveFilter(); }
             updateCounts();
             closeForm();
             map.setView([saved.latitude, saved.longitude], Math.max(map.getZoom(), 16));
@@ -611,6 +733,8 @@
         form.addEventListener("submit", saveMarking);
         form.addEventListener("keydown", function (e) { if (e.key === "Escape") { closeForm(); say("Changes cancelled."); } });
         field("marking-name").addEventListener("input", function () { setFieldError("name", ""); });
+        field("marking-category").addEventListener("change", function () { fillTypes(""); });
+        field("marking-type").addEventListener("change", toggleStatusFields);
 
         map.on("click", function (event) {
             if (!picking) { return; }

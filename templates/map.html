@@ -42,6 +42,11 @@
                     <span class="layer-count" data-count="{{ key }}">0</span>
                 </label>
                 {% endfor %}
+                <label class="layer-option">
+                    <input type="checkbox" id="show-inactive">
+                    <span class="swatch swatch-outline">{{ icon('clock') }}</span>
+                    <span class="layer-label">Resolved or expired</span>
+                </label>
                 <label class="layer-option boundary-option">
                     <input type="checkbox" id="show-barangays">
                     <span class="swatch swatch-outline">{{ icon('map') }}</span>
@@ -54,6 +59,7 @@
         <details class="panel-section" id="legend-section" open>
             <summary>{{ icon('info') }} Legend <span class="chev">{{ icon('chevron-down') }}</span></summary>
             <ul class="panel-body legend-list" id="legend-list"></ul>
+            <ul class="panel-body legend-list" id="legend-types" aria-label="Marking types"></ul>
         </details>
 
         {% if is_admin %}
@@ -74,6 +80,20 @@
                     <select id="marking-category" required>
                         {% for key, label in MARKING_CATEGORIES.items() %}<option value="{{ key }}">{{ label }}</option>{% endfor %}
                     </select>
+
+                    <label for="marking-type">Type</label>
+                    <select id="marking-type"></select>
+
+                    <div id="marking-status-fields" hidden>
+                        <label for="marking-status">Status</label>
+                        <select id="marking-status">
+                            <option value="active">Active</option>
+                            <option value="resolved">Resolved</option>
+                        </select>
+                        <label for="marking-expires">Expiry date (optional)</label>
+                        <input type="date" id="marking-expires">
+                        <p class="field-help">After this date the marking is treated as resolved on the public map.</p>
+                    </div>
 
                     <label for="marking-location">Address or location description</label>
                     <input type="text" id="marking-location" maxlength="250">
