@@ -66,10 +66,24 @@ def _m003_normalise_blank_text(connection):
     connection.execute("UPDATE map_markings SET location = NULL WHERE location = ''")
 
 
+def _m004_marking_types_and_status(connection):
+    """Specific marking types, plus an active/resolved status and optional
+    expiry date (YYYY-MM-DD) for temporary hazards. Existing rows stay active
+    and untyped."""
+    columns = _column_names(connection, "map_markings")
+    if "marking_type" not in columns:
+        connection.execute("ALTER TABLE map_markings ADD COLUMN marking_type TEXT")
+    if "status" not in columns:
+        connection.execute("ALTER TABLE map_markings ADD COLUMN status TEXT NOT NULL DEFAULT 'active'")
+    if "expires_at" not in columns:
+        connection.execute("ALTER TABLE map_markings ADD COLUMN expires_at TEXT")
+
+
 MIGRATIONS = [
     ("001_report_review_columns", _m001_report_review_columns),
     ("002_indexes", _m002_indexes),
     ("003_normalise_blank_text", _m003_normalise_blank_text),
+    ("004_marking_types_and_status", _m004_marking_types_and_status),
 ]
 
 

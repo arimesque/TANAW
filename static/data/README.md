@@ -9,5 +9,6 @@
   The positions are correct (verified against the town centre and a sample report)
   but the outlines are generalised. They are for visual reference only.
 * **Fix:** run `scripts/build_barangay_boundaries.py` with the full-resolution NAMRIA
-  shapefile (see the script's docstring). Do not hand-draw or smooth these shapes.
+  shapefile (see the script's docstring). It now defaults to `--tolerance 0` (no
+  simplification) so neighbouring barangays keep exactly the same shared border. Do not hand-draw or smooth these shapes.
 * Keep the attribution "PSA / NAMRIA" wherever the boundaries are shown (the map does this).

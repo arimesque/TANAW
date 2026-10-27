@@ -13,8 +13,19 @@ The .shp is a ~270 MB Git LFS file. Then run, from the TANAW folder:
     pip install pyshp
     python scripts/build_barangay_boundaries.py path/to/BgySubMuns.shp
 
-Only a very small simplification (default 0.00001 deg, about 1 m) is applied
-to drop redundant points; real bends and curves are preserved.
+By default NO simplification is applied (--tolerance 0). Each barangay ring is
+simplified on its own, so any tolerance above 0 can move the points along a
+border that two neighbouring barangays share, leaving small gaps or overlaps
+between them. With --tolerance 0 neighbours keep exactly the same border points.
+Coordinates are rounded to 6 decimals (about 0.1 m), which keeps shared points
+identical and makes the file smaller. If the file turns out too big for phones,
+try a small tolerance such as 0.000005 and check the borders on the map.
+
+Windows PowerShell example:
+    pip install pyshp
+    python scripts/build_barangay_boundaries.py C:\\path\\to\\BgySubMuns.shp --tolerance 0
+Then start the app, open the map, switch on "Barangay boundaries" and check that
+all 21 barangays are drawn, the outlines are smooth, and neighbours touch.
 """
 
 import argparse
@@ -66,12 +77,23 @@ def signed_area(ring):
     return sum(x1 * y2 - x2 * y1 for (x1, y1), (x2, y2) in zip(ring, ring[1:] + ring[:1])) / 2
 
 
+def clean_ring(ring, tolerance):
+    """Simplify (optional), round to 6 decimals, and drop repeated points."""
+    points = simplify([tuple(p) for p in ring], tolerance)
+    rounded = []
+    for x, y in points:
+        point = (round(x, 6), round(y, 6))
+        if not rounded or rounded[-1] != point:
+            rounded.append(point)
+    return rounded
+
+
 def to_geometry(shape, tolerance):
     """Group rings into polygons: clockwise rings are outer shells, the
     counter-clockwise rings that follow are holes (ESRI convention)."""
     polygons = []
     for ring in ring_list(shape):
-        ring = simplify([tuple(p) for p in ring], tolerance)
+        ring = clean_ring(ring, tolerance)
         if len(ring) < 4:
             continue
         if signed_area(ring) < 0:  # clockwise = outer shell
@@ -100,10 +122,30 @@ def build(source, tolerance):
     return {"type": "FeatureCollection", "features": features}
 
 
+def check_collection(collection):
+    """Return a list of problems found in the built GeoJSON (empty = fine)."""
+    problems = []
+    for feature in collection["features"]:
+        name = feature["properties"].get("ADM4_EN", "?")
+        geometry = feature["geometry"]
+        polygons = [geometry["coordinates"]] if geometry["type"] == "Polygon" else geometry["coordinates"]
+        for polygon in polygons:
+            for ring in polygon:
+                if len(ring) < 4 or ring[0] != ring[-1]:
+                    problems.append(f"{name}: a ring is not closed or has fewer than 4 points")
+                for lon, lat in ring:
+                    # Bacolor, Pampanga is near 15.0 N, 120.65 E.
+                    if not (14.8 <= lat <= 15.2 and 120.5 <= lon <= 120.8):
+                        problems.append(f"{name}: point ({lon}, {lat}) is outside the expected Bacolor area")
+                        break
+    return problems
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     parser.add_argument("shapefile", help="Path to the national barangay .shp file")
-    parser.add_argument("--tolerance", type=float, default=0.00001, help="Simplification in degrees (default 0.00001)")
+    parser.add_argument("--tolerance", type=float, default=0.0,
+                        help="Simplification in degrees (default 0 = none, keeps shared borders exact)")
     parser.add_argument("--output", default=str(OUTPUT))
     args = parser.parse_args()
 
@@ -112,11 +154,16 @@ def main():
         sys.exit(f"Expected 21 Bacolor barangays but found {len(collection['features'])}. "
                  "Check that this is the PSA/NAMRIA barangay shapefile (ADM3_PCODE PH0305404).")
 
+    problems = check_collection(collection)
+    if problems:
+        sys.exit("The result looks wrong, nothing was written:\n  " + "\n  ".join(problems[:10]))
+
     Path(args.output).write_text(json.dumps(collection, separators=(",", ":")), encoding="utf-8")
     vertices = sum(len(r) for f in collection["features"]
                    for poly in ([f["geometry"]["coordinates"]] if f["geometry"]["type"] == "Polygon" else f["geometry"]["coordinates"])
                    for r in poly)
-    print(f"Wrote {len(collection['features'])} barangays ({vertices} vertices) to {args.output}")
+    size_kb = Path(args.output).stat().st_size / 1024
+    print(f"Wrote {len(collection['features'])} barangays ({vertices} vertices, {size_kb:,.0f} KB) to {args.output}")
 
 
 if __name__ == "__main__":
