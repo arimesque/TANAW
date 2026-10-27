@@ -295,6 +295,46 @@ def test_vulnerability_page_and_api_for_admin(admin):
     assert admin.get("/api/vulnerability").get_json()["barangays"][0]["barangay_name"] == "Sample Barangay A"
 
 
+def test_marking_types_status_and_expiry(admin):
+    road = {**GOOD, "name": "Flooded underpass", "category": "hazard", "marking_type": "flooded_road"}
+    r = api(admin, "POST", "/api/map-markings", road)
+    assert r.status_code == 201
+    created = r.get_json()["marking"]
+    assert created["marking_type"] == "flooded_road" and created["status"] == "active"
+    assert created["expires_at"] is None and created["is_active"] is True
+
+    # Resolving, and an expiry date in the past, both make it inactive.
+    r = api(admin, "PUT", f"/api/map-markings/{created['id']}", {**road, "status": "resolved"})
+    assert r.get_json()["marking"]["is_active"] is False
+    r = api(admin, "PUT", f"/api/map-markings/{created['id']}", {**road, "status": "active", "expires_at": "2020-01-01"})
+    assert r.get_json()["marking"]["status"] == "active" and r.get_json()["marking"]["is_active"] is False
+    r = api(admin, "PUT", f"/api/map-markings/{created['id']}", {**road, "status": "active", "expires_at": "2999-12-31"})
+    assert r.get_json()["marking"]["is_active"] is True
+
+    # Editing without the new fields keeps them.
+    r = api(admin, "PUT", f"/api/map-markings/{created['id']}",
+            {"name": "Renamed", "category": "hazard", "marking_type": "flooded_road"})
+    assert r.get_json()["marking"]["expires_at"] == "2999-12-31"
+
+    # Permanent types ignore status/expiry; untyped markings stay valid.
+    hall = {**GOOD, "category": "facility", "marking_type": "barangay_hall", "status": "resolved", "expires_at": "2020-01-01"}
+    saved = api(admin, "POST", "/api/map-markings", hall).get_json()["marking"]
+    assert saved["status"] == "active" and saved["expires_at"] is None and saved["is_active"] is True
+    assert api(admin, "POST", "/api/map-markings", GOOD).get_json()["marking"]["marking_type"] is None
+
+
+def test_marking_type_validation(admin):
+    bad = [
+        {**GOOD, "marking_type": "flooded_road"},  # hazard type under evacuation_center
+        {**GOOD, "category": "hazard", "marking_type": "nonsense"},
+        {**GOOD, "category": "hazard", "marking_type": "closed_road", "status": "archived"},
+        {**GOOD, "category": "hazard", "marking_type": "closed_road", "expires_at": "31/12/2026"},
+        {**GOOD, "category": "hazard", "marking_type": "closed_road", "expires_at": "2026-02-30"},
+    ]
+    for body in bad:
+        assert api(admin, "POST", "/api/map-markings", body).status_code == 400, body
+
+
 # ---------- Database migration ----------
 def test_migration_preserves_existing_records(tmp_path, monkeypatch):
     legacy = tmp_path / "legacy.db"
@@ -321,4 +361,6 @@ def test_migration_preserves_existing_records(tmp_path, monkeypatch):
         assert {"reviewed_at", "reviewed_by"} <= cols
         assert conn.execute("SELECT description FROM incident_reports").fetchone()[0] == "keep me"
         assert conn.execute("SELECT description FROM map_markings").fetchone()[0] is None
+        row = conn.execute("SELECT marking_type, status, expires_at FROM map_markings").fetchone()
+        assert (row["marking_type"], row["status"], row["expires_at"]) == (None, "active", None)
         assert conn.execute("SELECT COUNT(*) FROM schema_migrations").fetchone()[0] == len(database.MIGRATIONS)

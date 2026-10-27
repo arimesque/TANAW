@@ -86,6 +86,20 @@ MARKING_CATEGORIES = {
     "hazard": "Hazard",
     "other": "Other",
 }
+# Specific marking types, grouped under the existing categories. Types flagged
+# temporary are short-lived hazards, so they may be resolved or given an expiry.
+MARKING_TYPES = {
+    "flooded_road": {"category": "hazard", "label": "Flooded road", "temporary": True},
+    "road_construction": {"category": "hazard", "label": "Road construction", "temporary": True},
+    "closed_road": {"category": "hazard", "label": "Closed road", "temporary": True},
+    "road_damage": {"category": "hazard", "label": "Potholes / road damage", "temporary": True},
+    "fallen_tree_debris": {"category": "incident", "label": "Fallen tree / debris", "temporary": True},
+    "landslide": {"category": "incident", "label": "Landslide", "temporary": True},
+    "barangay_hall": {"category": "facility", "label": "Barangay hall", "temporary": False},
+    "health_center": {"category": "facility", "label": "Health center", "temporary": False},
+    "fire_station": {"category": "facility", "label": "Fire station", "temporary": False},
+}
+MARKING_STATUSES = ("active", "resolved")
 
 # Loose bounding box of the Philippines; catches swapped or garbage coordinates.
 PH_LAT_RANGE = (4.0, 22.0)
@@ -272,7 +286,21 @@ def map_page():
 # --------------------------------------------------------------------------
 # Map markings API
 # --------------------------------------------------------------------------
-MARKING_COLUMNS = "id, name, category, description, location, latitude, longitude, created_at, updated_at"
+MARKING_COLUMNS = (
+    "id, name, category, marking_type, status, expires_at, description, location, "
+    "latitude, longitude, created_at, updated_at"
+)
+
+
+def marking_to_dict(row):
+    """API shape for a marking; `is_active` is false once resolved or expired
+    (expiry is the last day the marking applies, in Philippine time)."""
+    marking = dict(row)
+    today = datetime.now(PH_TZ).date().isoformat()
+    marking["is_active"] = marking["status"] == "active" and (
+        not marking["expires_at"] or marking["expires_at"] >= today
+    )
+    return marking
 
 
 def parse_marking_payload(data, existing=None):
@@ -298,6 +326,33 @@ def parse_marking_payload(data, existing=None):
     if len(location) > 250:
         return None, "The location description must be 250 characters or fewer."
 
+    # Omitted type/status/expiry keep the saved values when editing.
+    def pick(key, default):
+        if key in data:
+            return data.get(key)
+        return existing[key] if existing is not None else default
+
+    marking_type = str(pick("marking_type", "") or "").strip().lower()
+    status = str(pick("status", "active") or "active").strip().lower()
+    expires_at = str(pick("expires_at", "") or "").strip()
+
+    if marking_type:
+        type_info = MARKING_TYPES.get(marking_type)
+        if type_info is None or type_info["category"] != category:
+            return None, "Please select a marking type that belongs to the chosen category."
+    if status not in MARKING_STATUSES:
+        return None, "Status must be active or resolved."
+    if expires_at:
+        try:
+            if not re.fullmatch(r"\d{4}-\d{2}-\d{2}", expires_at):
+                raise ValueError
+            datetime.strptime(expires_at, "%Y-%m-%d")
+        except ValueError:
+            return None, "Expiry date must be a valid date (YYYY-MM-DD)."
+    # Only temporary hazards can be resolved or expire; everything else stays active.
+    if not (marking_type and MARKING_TYPES[marking_type]["temporary"]):
+        status, expires_at = "active", ""
+
     if existing is not None and "latitude" not in data and "longitude" not in data:
         latitude, longitude = existing["latitude"], existing["longitude"]
     else:
@@ -308,6 +363,7 @@ def parse_marking_payload(data, existing=None):
 
     return {
         "name": name, "category": category,
+        "marking_type": marking_type or None, "status": status, "expires_at": expires_at or None,
         "description": description or None, "location": location or None,
         "latitude": latitude, "longitude": longitude,
     }, None
@@ -319,7 +375,7 @@ def map_markings_data():
         rows = connection.execute(
             f"SELECT {MARKING_COLUMNS} FROM map_markings ORDER BY name COLLATE NOCASE"
         ).fetchall()
-    return jsonify({"markings": [dict(row) for row in rows]})
+    return jsonify({"markings": [marking_to_dict(row) for row in rows]})
 
 
 @app.route("/api/map-markings", methods=["POST"])
@@ -331,8 +387,10 @@ def create_map_marking():
 
     with get_connection() as connection:
         cursor = connection.execute(
-            """INSERT INTO map_markings (name, category, description, location, latitude, longitude)
-               VALUES (:name, :category, :description, :location, :latitude, :longitude)""",
+            """INSERT INTO map_markings (name, category, marking_type, status, expires_at,
+                                        description, location, latitude, longitude)
+               VALUES (:name, :category, :marking_type, :status, :expires_at,
+                       :description, :location, :latitude, :longitude)""",
             values,
         )
         marking = connection.execute(
@@ -340,7 +398,7 @@ def create_map_marking():
         ).fetchone()
 
     record_audit("map_marking_created", f"Created map marking #{marking['id']} '{values['name']}'.")
-    return jsonify({"marking": dict(marking)}), 201
+    return jsonify({"marking": marking_to_dict(marking)}), 201
 
 
 @app.route("/api/map-markings/<int:marking_id>", methods=["PUT"])
@@ -360,7 +418,8 @@ def update_map_marking(marking_id):
         values["id"] = marking_id
         connection.execute(
             """UPDATE map_markings
-               SET name = :name, category = :category, description = :description,
+               SET name = :name, category = :category, marking_type = :marking_type,
+                   status = :status, expires_at = :expires_at, description = :description,
                    location = :location, latitude = :latitude, longitude = :longitude,
                    updated_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now')
                WHERE id = :id""",
@@ -371,7 +430,7 @@ def update_map_marking(marking_id):
         ).fetchone()
 
     record_audit("map_marking_updated", f"Updated map marking #{marking_id} '{values['name']}'.")
-    return jsonify({"marking": dict(marking)})
+    return jsonify({"marking": marking_to_dict(marking)})
 
 
 @app.route("/api/map-markings/<int:marking_id>", methods=["DELETE"])
