@@ -79,11 +79,23 @@ def _m004_marking_types_and_status(connection):
         connection.execute("ALTER TABLE map_markings ADD COLUMN expires_at TEXT")
 
 
+def _m005_link_report_markings(connection):
+    """Link automatically published map markings to their source report."""
+    columns = _column_names(connection, "map_markings")
+    if "incident_report_id" not in columns:
+        connection.execute("ALTER TABLE map_markings ADD COLUMN incident_report_id INTEGER")
+    connection.execute(
+        "CREATE UNIQUE INDEX IF NOT EXISTS idx_map_markings_report "
+        "ON map_markings(incident_report_id) WHERE incident_report_id IS NOT NULL"
+    )
+
+
 MIGRATIONS = [
     ("001_report_review_columns", _m001_report_review_columns),
     ("002_indexes", _m002_indexes),
     ("003_normalise_blank_text", _m003_normalise_blank_text),
     ("004_marking_types_and_status", _m004_marking_types_and_status),
+    ("005_link_report_markings", _m005_link_report_markings),
 ]
 
 

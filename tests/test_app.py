@@ -272,6 +272,22 @@ def test_review_status_workflow(admin):
         row = c.execute("SELECT status, reviewed_by FROM incident_reports WHERE id=?", (rid,)).fetchone()
         assert (row["status"], row["reviewed_by"]) == ("verified", "admin")
         assert c.execute("SELECT COUNT(*) FROM audit_logs WHERE action='report_status_changed'").fetchone()[0] == 1
+        marking = c.execute(
+            "SELECT name, category, description, location, latitude, longitude, incident_report_id "
+            "FROM map_markings WHERE incident_report_id = ?", (rid,)
+        ).fetchone()
+        assert marking is not None
+        assert marking["name"] == f"Fire (Report #{rid})"
+        assert (marking["category"], marking["description"], marking["location"]) == (
+            "incident", "d", "Somewhere"
+        )
+        assert (marking["latitude"], marking["longitude"]) == (15.0, 120.65)
+    # Re-reviewing the report must not create a duplicate public marker.
+    admin.post(f"/dashboard/report/{rid}/status", data={"csrf_token": token, "status": "verified"})
+    with database.get_connection() as c:
+        assert c.execute(
+            "SELECT COUNT(*) FROM map_markings WHERE incident_report_id = ?", (rid,)
+        ).fetchone()[0] == 1
     admin.post(f"/dashboard/report/{rid}/status", data={"csrf_token": token, "status": "hacked"})
     with database.get_connection() as c:
         assert c.execute("SELECT status FROM incident_reports WHERE id=?", (rid,)).fetchone()["status"] == "verified"

@@ -287,7 +287,7 @@ def map_page():
 # Map markings API
 # --------------------------------------------------------------------------
 MARKING_COLUMNS = (
-    "id, name, category, marking_type, status, expires_at, description, location, "
+    "id, name, category, marking_type, status, expires_at, incident_report_id, description, location, "
     "latitude, longitude, created_at, updated_at"
 )
 
@@ -645,7 +645,7 @@ def update_report_status(report_id):
 
     with get_connection() as connection:
         report = connection.execute(
-            "SELECT status FROM incident_reports WHERE id = ?", (report_id,)
+            "SELECT * FROM incident_reports WHERE id = ?", (report_id,)
         ).fetchone()
         if report is None:
             abort(404)
@@ -656,6 +656,24 @@ def update_report_status(report_id):
                WHERE id = ?""",
             (new_status, current_admin_name(), report_id),
         )
+        if new_status == "verified" and report["latitude"] is not None and report["longitude"] is not None:
+            connection.execute(
+                """INSERT INTO map_markings
+                       (name, category, description, location, latitude, longitude, incident_report_id)
+                   SELECT ?, 'incident', ?, ?, ?, ?, ?
+                   WHERE NOT EXISTS (
+                       SELECT 1 FROM map_markings WHERE incident_report_id = ?
+                   )""",
+                (
+                    f"{INCIDENT_TYPES.get(report['incident_type'], 'Incident')} (Report #{report_id})",
+                    report["description"],
+                    report["incident_location"],
+                    report["latitude"],
+                    report["longitude"],
+                    report_id,
+                    report_id,
+                ),
+            )
 
     record_audit(
         "report_status_changed",
