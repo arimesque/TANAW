@@ -4,6 +4,7 @@
 {% block head %}
 <link rel="stylesheet" href="{{ url_for('static', filename='vendor/leaflet/leaflet.css') }}">
 <link rel="stylesheet" href="{{ url_for('static', filename='css/report.css') }}">
+<link rel="stylesheet" href="{{ url_for('static', filename='css/device.css') }}">
 {% endblock %}
 
 {% block content %}
@@ -79,9 +80,9 @@
         <input type="file" id="camera-file" name="camera_photo" accept="image/*" capture="environment" class="visually-hidden">
         <div class="btn-row photo-buttons">
             <label for="photo-file" class="btn btn-secondary">{{ icon('image') }} Choose a photo</label>
-            <label for="camera-file" class="btn btn-secondary">{{ icon('camera') }} Take a photo</label>
+            <label for="camera-file" id="camera-label" class="btn btn-secondary">{{ icon('camera') }} Take a photo</label>
         </div>
-        <p class="field-help">JPG, PNG or WEBP, up to 10 MB. Only MDRRMO staff can view it.</p>
+        <p class="field-help">JPG, PNG or WEBP, up to 10 MB. Only MDRRMO staff can view it. If the camera cannot open, “Take a photo” falls back to your device’s file picker.</p>
         {% if errors and errors.get('photo') %}{{ field_error(errors, 'photo') }}{% elif errors %}<p class="field-help">If you had attached a photo, please attach it again.</p>{% endif %}
         <div id="photo-preview" class="photo-preview" hidden>
             <img id="preview-image" alt="Preview of the selected incident photo">
@@ -91,6 +92,21 @@
         <button type="submit" class="btn btn-primary btn-block submit-btn" id="submit-button">{{ icon('upload') }} <span>Submit report</span></button>
     </section>
 </form>
+
+{# Live camera preview, opened by "Take a photo" (see report.js). Hidden until used. #}
+<div id="camera-modal" class="camera-modal" role="dialog" aria-modal="true" aria-labelledby="camera-title" hidden>
+    <div class="camera-box">
+        <h2 id="camera-title">Take a photo</h2>
+        <p id="camera-status" class="field-help" role="status">Starting camera…</p>
+        <div class="camera-stage"><video id="camera-video" autoplay playsinline muted></video></div>
+        <div class="btn-row camera-actions">
+            <button type="button" id="camera-capture" class="btn btn-primary" disabled>{{ icon('camera') }} Capture</button>
+            <button type="button" id="camera-switch" class="btn btn-secondary" hidden>{{ icon('refresh-cw') }} Switch camera</button>
+            <button type="button" id="camera-fallback" class="btn btn-secondary" hidden>{{ icon('image') }} Choose from device</button>
+            <button type="button" id="camera-cancel" class="btn btn-ghost">{{ icon('x') }} Cancel</button>
+        </div>
+    </div>
+</div>
 {% endblock %}
 
 {% block scripts %}

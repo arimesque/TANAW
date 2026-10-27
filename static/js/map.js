@@ -43,10 +43,14 @@
 
     /* ---------- Map setup ---------- */
     L.Icon.Default.imagePath = mapElement.dataset.markerImagePath;
-    var map = L.map(mapElement, { zoomControl: true, minZoom: 10 }).setView(DEFAULT_VIEW.center, DEFAULT_VIEW.zoom);
+    /* OpenStreetMap has real tiles only up to zoom 19. Zoom 20-21 just
+       enlarges the zoom-19 picture (no extra detail, no extra tile requests). */
+    var NATIVE_MAX_ZOOM = 19, MAX_ZOOM = 21;
+    var map = L.map(mapElement, { zoomControl: true, minZoom: 10, maxZoom: MAX_ZOOM }).setView(DEFAULT_VIEW.center, DEFAULT_VIEW.zoom);
 
     L.tileLayer("https://tile.openstreetmap.org/{z}/{x}/{y}.png", {
-        maxZoom: 19,
+        maxNativeZoom: NATIVE_MAX_ZOOM,
+        maxZoom: MAX_ZOOM,
         attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
     }).addTo(map);
     L.control.scale({ imperial: false }).addTo(map);
@@ -387,26 +391,53 @@
     }
 
     var locationLayer = L.layerGroup().addTo(map);
+    var cancelLocate = null;
     function locateMe() {
         if (!navigator.geolocation) { say("Your browser does not support location access.", true); return; }
+        if (cancelLocate) { cancelLocate(); }
         say("Requesting your location. Please allow access if prompted.");
-        navigator.geolocation.getCurrentPosition(function (position) {
+        var firstReading = true;
+
+        function draw(position) {
             var here = [position.coords.latitude, position.coords.longitude];
             locationLayer.clearLayers();
             L.circle(here, { radius: position.coords.accuracy, color: "#164b78", weight: 1, fillOpacity: 0.08 }).addTo(locationLayer);
             L.circleMarker(here, { radius: 8, color: "#fff", weight: 2, fillColor: "#164b78", fillOpacity: 1 })
-                .bindPopup("Your current location (accurate to about " + Math.round(position.coords.accuracy) + " m).")
+                .bindPopup("Your current location (accurate to about " + api.formatAccuracy(position.coords.accuracy) + ").")
                 .addTo(locationLayer);
-            map.setView(here, 16);
-            say("Your current location is shown. It is not saved or sent anywhere.");
-        }, function (error) {
-            var messages = {
-                1: "Location access was denied. Allow it in your browser settings to use this button.",
-                2: "Your location is currently unavailable.",
-                3: "The location request timed out. Please try again."
-            };
-            say(messages[error.code] || "Could not get your location.", true);
-        }, { enableHighAccuracy: true, timeout: 10000, maximumAge: 30000 });
+            return here;
+        }
+
+        /* Listens for a few seconds and keeps the most accurate reading. */
+        cancelLocate = api.locate({
+            onUpdate: function (position, info) {
+                var here = draw(position);
+                if (firstReading) { map.setView(here, 16); firstReading = false; }
+                say("Improving accuracy… about " + api.formatAccuracy(info.accuracy) + " so far.");
+            },
+            onDone: function (position, info) {
+                cancelLocate = null;
+                var here = draw(position);
+                /* Zoom to fit the accuracy circle, but never closer than 17. */
+                map.fitBounds(L.latLng(here).toBounds(Math.max(position.coords.accuracy, 20) * 2), { maxZoom: 17 });
+                if (info.poor) {
+                    say("Warning: your location is only accurate to about " + api.formatAccuracy(info.accuracy) +
+                        ", so the marker may be far from where you really are. Laptops and indoor spots are often this inaccurate. " +
+                        "Try again outdoors on a phone.", true);
+                } else {
+                    say("Your current location is shown (about " + api.formatAccuracy(info.accuracy) + " accuracy). It is not saved or sent anywhere.");
+                }
+            },
+            onError: function (error) {
+                cancelLocate = null;
+                var messages = {
+                    1: "Location access was denied. Allow it in your browser settings to use this button.",
+                    2: "Your location is currently unavailable.",
+                    3: "The location request timed out. Please try again."
+                };
+                say(messages[error.code] || "Could not get your location.", true);
+            }
+        });
     }
 
     var ActionControl = L.Control.extend({
