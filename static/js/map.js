@@ -207,6 +207,10 @@
             riseOnHover: true
         });
         marker.bindPopup(buildPopup(marking), { maxWidth: 280 });
+        marker.on("click", function (event) {
+            L.DomEvent.stopPropagation(event);
+            marker.openPopup();
+        });
         if (isActive(marking) || (showInactive && showInactive.checked)) { marker.addTo(categoryLayers[key]); }
         markerById.set(marking.id, { marker: marker, marking: marking, category: key });
         return true;
