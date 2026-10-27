@@ -1,0 +1,17 @@
+/* Styles for the device features: the live camera dialog (report form) and the
+   location accuracy warning (report form and map). Kept in its own file so it
+   does not clash with the other CSS files; the polish owner may restyle it. */
+
+
+.field-help.is-warning { color: #8a3b00; background: #fff4e5; border-left: 4px solid #e08a00; padding: .5rem .7rem; border-radius: 6px; font-weight: 600; }
+
+body.camera-open { overflow: hidden; }
+.camera-modal { position: fixed; inset: 0; z-index: 2000; display: flex; align-items: center; justify-content: center; padding: 1rem; background: rgba(10, 20, 30, .72); }
+.camera-modal[hidden] { display: none; }
+.camera-box { width: 100%; max-width: 560px; max-height: 100%; overflow-y: auto; background: #fff; border-radius: 12px; padding: 1.1rem; box-shadow: 0 10px 40px rgba(0, 0, 0, .4); }
+.camera-box h2 { margin: 0 0 .3rem; }
+.camera-stage { margin-top: .6rem; background: #000; border-radius: 8px; overflow: hidden; }
+.camera-stage video { display: block; width: 100%; max-height: 60vh; object-fit: contain; background: #000; }
+.camera-actions { margin-top: .8rem; }
+/* .btn sets its own display, which would otherwise override the hidden attribute. */
+.camera-box [hidden] { display: none !important; }
